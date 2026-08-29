@@ -1,6 +1,7 @@
 import config
 from access_log import read_access_log_window
 from log_grouper import group_logs_by_contiguous_seconds
+from sliding_window import create_sliding_detection_windows
 from pprint import pprint
 
 access_log = config.access_log_file_path
@@ -23,4 +24,8 @@ logs = read_access_log_window(
 )
 logs = group_logs_by_contiguous_seconds(logs)
 
-pprint(logs)
+detection_windows = create_sliding_detection_windows(
+    logs, request_threshold, detection_window
+)
+
+pprint(detection_windows)
