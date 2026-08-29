@@ -1,6 +1,3 @@
-from datetime import datetime
-
-
 def create_sliding_detection_windows(logs, request_threshold, detection_window):
 
     result = {}
@@ -25,23 +22,17 @@ def create_sliding_detection_windows(logs, request_threshold, detection_window):
 
                     if not second_counter:
                         second_counter += 1
-                        start = datetime.strptime(
-                            value2["request_dt"].strip("[]"), "%d/%b/%Y:%H:%M:%S %z"
-                        )
+                        start = value2["request_dt"]
 
                     elif log[index2]["request_dt"] != log[index2 - 1]["request_dt"]:
                         second_counter += 1
 
                     if second_counter == detection_window:
-                        end = datetime.strptime(
-                            value2["request_dt"].strip("[]"), "%d/%b/%Y:%H:%M:%S %z"
-                        )
+                        end = value2["request_dt"]
                         break
 
             else:
-                end = datetime.strptime(
-                    value2["request_dt"].strip("[]"), "%d/%b/%Y:%H:%M:%S %z"
-                )
+                end = value2["request_dt"]
 
             result[(start, end)] = requests
 

@@ -13,5 +13,6 @@ access_log_request_method_n_url_index = 4
 post_request_threshold = 5
 post_detection_window = 2
 
-get_request_threshold = 15
+# get_request_threshold = 15
+get_request_threshold = 3
 get_detection_window = 3
