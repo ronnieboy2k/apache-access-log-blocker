@@ -1,0 +1,23 @@
+import config
+from access_log import read_access_log_window
+from pprint import pprint
+
+access_log = config.access_log_file_path
+read_window = config.access_log_read_window
+access_log_remote_addr_index = config.access_log_remote_addr_index
+access_log_request_dt_index = config.access_log_request_dt_index
+access_log_request_method_n_url_index = config.access_log_request_method_n_url_index
+
+request_method = "GET"
+request_threshold = getattr(config, f"{request_method.lower()}_request_threshold")
+detection_window = getattr(config, f"{request_method.lower()}_detection_window")
+
+
+logs = read_access_log_window(
+    access_log,
+    read_window,
+    access_log_remote_addr_index,
+    access_log_request_dt_index,
+    access_log_request_method_n_url_index,
+)
+pprint(logs)
