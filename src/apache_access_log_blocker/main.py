@@ -1,5 +1,6 @@
 import config
 from access_log import read_access_log_window
+from log_grouper import group_logs_by_contiguous_seconds
 from pprint import pprint
 
 access_log = config.access_log_file_path
@@ -20,4 +21,6 @@ logs = read_access_log_window(
     access_log_request_dt_index,
     access_log_request_method_n_url_index,
 )
+logs = group_logs_by_contiguous_seconds(logs)
+
 pprint(logs)
