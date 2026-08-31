@@ -9,9 +9,10 @@ def read_access_log_window(
     remote_addr_index,
     request_dt_index,
     request_method_n_url_index,
+    log_dt_format,
 ):
 
-    result = []
+    access_log_window = []
 
     access_log = Path(access_log)
 
@@ -29,7 +30,7 @@ def read_access_log_window(
                 if index == request_dt_index:
                     request_data["request_dt_str"] = value.strip("[]")
                     request_data["request_dt"] = datetime.strptime(
-                        value.strip("[]"), "%d/%b/%Y:%H:%M:%S %z"
+                        value.strip("[]"), log_dt_format
                     )
                 if index == request_method_n_url_index:
                     method_n_url = value.split(" ")
@@ -42,6 +43,10 @@ def read_access_log_window(
                     <= request_data["request_dt"]
                     <= access_log_dt_read_end
                 ):
-                    result.append(request_data)
+                    access_log_window.append(request_data)
 
-    return result
+    return (
+        access_log_window,
+        access_log_dt_read_start,
+        access_log_dt_read_end,
+    )
