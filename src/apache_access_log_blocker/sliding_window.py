@@ -22,17 +22,17 @@ def create_sliding_detection_windows(logs, request_threshold, detection_window):
 
                     if not second_counter:
                         second_counter += 1
-                        start = value2["request_dt"]
+                        start = value2["request_dt_str"]
 
                     elif log[index2]["request_dt"] != log[index2 - 1]["request_dt"]:
                         second_counter += 1
 
                     if second_counter == detection_window:
-                        end = value2["request_dt"]
+                        end = value2["request_dt_str"]
                         break
 
             else:
-                end = value2["request_dt"]
+                end = value2["request_dt_str"]
 
             result[(start, end)] = requests
 

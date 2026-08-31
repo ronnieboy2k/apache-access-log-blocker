@@ -2,6 +2,10 @@ import config
 from access_log import read_access_log_window
 from log_grouper import group_logs_by_contiguous_seconds
 from sliding_window import create_sliding_detection_windows
+from block_detector import (
+    find_get_remote_addrs_to_block,
+    find_post_remote_addrs_to_block,
+)
 from pprint import pprint
 
 access_log = config.access_log_file_path
@@ -28,4 +32,9 @@ detection_windows = create_sliding_detection_windows(
     logs, request_threshold, detection_window
 )
 
-pprint(detection_windows)
+
+remote_addrs_to_block = find_post_remote_addrs_to_block(
+    detection_windows, request_threshold
+)
+
+pprint(remote_addrs_to_block)

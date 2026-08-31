@@ -27,6 +27,7 @@ def read_access_log_window(
                 if index == remote_addr_index:
                     request_data["remote_addr"] = value
                 if index == request_dt_index:
+                    request_data["request_dt_str"] = value.strip("[]")
                     request_data["request_dt"] = datetime.strptime(
                         value.strip("[]"), "%d/%b/%Y:%H:%M:%S %z"
                     )
