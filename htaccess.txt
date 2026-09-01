@@ -1,0 +1,46 @@
+
+
+
+<Files xmlrpc.php>
+<IfModule !mod_authz_core.c>
+order deny,allow
+deny from all
+allow from 180.195.55.205
+allow from 172.26.4.41
+</IfModule>
+<IfModule mod_authz_core.c>
+Require ip 180.195.55.205 172.26.4.41
+</IfModule>
+</Files>
+# END GOTMLS Patch to Block XMLRPC Access
+
+
+
+# BEGIN WordPress
+# The directives (lines) between "BEGIN WordPress" and "END WordPress" are
+# dynamically generated, and should only be modified via WordPress filters.
+# Any changes to the directives between these markers will be overwritten.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+
+# END WordPress
+
+<RequireAll>
+    Require all granted
+
+    # Apache Access Log Auto Blocker - BEGIN
+
+    # METHOD: GET
+    # DETECTION WINDOW: 30/Aug/2026:23:59:58 +0800 -> 31/Aug/2026:00:00:00 +0800
+    # ADDED: 01/Sep/2026:00:18:47 +0800
+    Require not ip ::1
+
+    # Apache Access Log Auto Blocker - END
+</RequireAll>
