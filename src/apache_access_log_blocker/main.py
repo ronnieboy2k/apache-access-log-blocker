@@ -121,14 +121,3 @@ if remote_addrs_to_block:
                         file.write(content)
                         file.truncate()
                 # End: Create and add remote addresses / IPs to block section.
-
-
-pprint(remote_addrs_to_block)
-
-
-# block_entry = f"""    # METHOD: {request_method.upper()}
-#     # WINDOW: {dt_start} -> {dt_end}
-#     # ADDED: {dt_now}
-#     Require not ip {remote_addr}
-
-# """
