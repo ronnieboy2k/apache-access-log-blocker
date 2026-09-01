@@ -7,33 +7,33 @@ def create_sliding_detection_windows(logs, request_threshold, detection_window):
         if len(log) < request_threshold:
             continue
 
-        for index, value in enumerate(log):
+        for index in range(len(log)):
 
             requests = []
-
             start = None
             end = None
             second_counter = 0
-            for index2, value2 in enumerate(log):
+            previous_dt = None
 
-                if index2 >= index:
+            for value in log[index:]:
 
-                    requests.append(value2)
+                if previous_dt != value["request_dt"]:
+                    second_counter += 1
 
-                    if not second_counter:
-                        second_counter += 1
-                        start = value2["request_dt_str"]
-
-                    elif log[index2]["request_dt"] != log[index2 - 1]["request_dt"]:
-                        second_counter += 1
-
-                    if second_counter == detection_window:
-                        end = value2["request_dt_str"]
+                    if second_counter > detection_window:
                         break
 
-            else:
-                end = value2["request_dt_str"]
+                if start is None:
+                    start = value["request_dt_str"]
 
-            result[(start, end)] = requests
+                requests.append(value)
+                end = value["request_dt_str"]
+
+                previous_dt = value["request_dt"]
+
+            window_key = (start, end)
+
+            if window_key not in result or len(requests) > len(result[window_key]):
+                result[window_key] = requests
 
     return result
