@@ -26,13 +26,13 @@ The Python version now includes:
 * End-to-end integration testing
 * Configuration-driven behavior
 
-The project demonstrates how an older solution can be revisited, modernized, and improved using current programming practices and software architecture.
+The project demonstrates how an older solution can be revisited, modernized, and improved using current programming practices, modular architecture, and automated testing.
 
 ---
 
 ## How It Works
 
-The application follows a multi-stage detection and blocking process.
+The application follows a multi-stage detection and blocking pipeline:
 
 ```text
 Apache Access Log
@@ -55,16 +55,20 @@ Apply Request Threshold
         │               │
         └───────┬───────┘
                 ▼
-      IPs to Block
+        IPs to Block
                 │
                 ▼
      Check Existing Blocks
                 │
                 ▼
-      Update .htaccess
+         Update .htaccess
 ```
 
-### 1. Access Log Read Window
+Each stage has a specific responsibility, allowing the individual components to be developed and tested independently.
+
+---
+
+## 1. Access Log Read Window
 
 The application reads only a configurable time period from the Apache access log.
 
@@ -80,17 +84,19 @@ If the current time is:
 14:30:10
 ```
 
-the application reads requests between:
+the application processes requests between:
 
 ```text
 14:30:00 → 14:30:10
 ```
 
-This prevents the application from processing the entire access log on every execution.
+This avoids processing the entire Apache access log every time the application runs.
+
+The read window is configurable and can be adjusted according to the monitoring frequency and server environment.
 
 ---
 
-### 2. Contiguous Detection
+## 2. Contiguous-Second Log Grouping
 
 After reading the access log, requests are grouped into sequences of **contiguous timestamp-seconds**.
 
@@ -104,15 +110,21 @@ For example:
 22:00:02
 ```
 
-belongs to one contiguous sequence because each timestamp-second follows the previous second.
+belongs to one contiguous sequence because the timestamp seconds progress continuously:
 
-The purpose of this stage is to establish the request sequence used by the detection-window algorithm.
+```text
+22:00:00 → 22:00:01 → 22:00:02
+```
+
+Multiple requests occurring during the same second remain part of that same sequence.
+
+The purpose of this stage is to organize requests into usable sequences before applying the detection-window algorithm.
 
 ---
 
-### 3. Detection Threshold
+## 3. Request Threshold
 
-The **request threshold** determines how many requests are required before an IP can be considered suspicious.
+The **request threshold** determines how many matching requests are required before an IP is considered suspicious.
 
 For example:
 
@@ -120,65 +132,69 @@ For example:
 POST request threshold = 3
 ```
 
-means an IP must generate at least **3 matching POST requests** within the configured detection window before it can be blocked.
+means an IP must generate at least:
 
-The threshold is configurable and can be adjusted according to the desired sensitivity.
+```text
+3 matching POST requests
+```
+
+within the configured detection window before it qualifies for blocking.
+
+The threshold is configurable so that the sensitivity of the detection system can be adjusted without changing the detection algorithms.
 
 ---
 
-### 4. Sliding Detection Window
+## 4. Sliding Detection Window
 
-The application uses a sliding detection window to detect bursts of requests.
+The application uses a **sliding detection window** to detect bursts of requests across consecutive timestamp-seconds.
 
-For example, with:
+For example:
 
 ```text
 Request threshold: 3
 Detection window: 2 seconds
 ```
 
-the application evaluates requests across consecutive two-second periods.
-
-Example:
+Consider these requests:
 
 ```text
 22:00:00  ── Request
 22:00:00  ── Request
 22:00:01  ── Request
+22:00:02  ── Request
 ```
 
-This produces:
+The first sliding detection window is:
 
 ```text
-Detection Window:
 22:00:00 → 22:00:01
 ```
 
-with:
+containing:
 
 ```text
 3 requests
 ```
 
-If the threshold is:
+Since the request threshold is:
 
 ```text
 3
 ```
 
-the IP qualifies for blocking.
+the IP qualifies for blocking under the applicable detection rule.
 
-The sliding-window approach allows the application to detect bursts even when the requests do not align with fixed clock intervals.
+The window then slides forward and evaluates subsequent requests.
+
+This approach allows the application to detect bursts without relying exclusively on fixed clock boundaries.
 
 ---
 
-## Detection Rules
+## 5. GET Detection
 
-GET and POST requests are evaluated separately.
+GET requests are evaluated separately from POST requests.
 
-### GET Detection
-
-GET detection identifies an IP generating requests to **different URLs** at a suspicious rate.
+The GET detection rule identifies an IP generating requests to **different URLs** at a suspicious rate.
 
 Example:
 
@@ -188,15 +204,26 @@ Example:
 127.0.0.1 → GET /contact
 ```
 
-If the configured GET threshold is reached within the detection window, the IP is considered for blocking.
+If the configured GET request threshold is reached within the detection window, the IP is considered for blocking.
 
-This can help identify automated scanning or crawling behavior.
+This type of behavior can help identify automated scanning, crawling, or other abnormal request activity.
+
+The GET threshold and detection window are configurable.
+
+Example:
+
+```python
+GET_REQUEST_THRESHOLD = 15
+GET_DETECTION_WINDOW = 3
+```
 
 ---
 
-### POST Detection
+## 6. POST Detection
 
-POST detection identifies repeated requests from the same IP to the **same URL**.
+POST requests are evaluated separately from GET requests.
+
+The POST detection rule identifies repeated requests from the same IP to the **same URL**.
 
 Example:
 
@@ -206,15 +233,61 @@ Example:
 127.0.0.1 → POST /login
 ```
 
-If the configured POST threshold is reached within the detection window, the IP is considered for blocking.
+If the configured POST request threshold is reached within the detection window, the IP is considered for blocking.
 
-This can help detect repeated automated POST attempts against endpoints such as login or form-processing URLs.
+This can help detect repeated automated POST attempts against endpoints such as:
+
+* Login forms
+* Authentication endpoints
+* Form-processing endpoints
+* Other POST-based application endpoints
+
+Example configuration:
+
+```python
+POST_REQUEST_THRESHOLD = 5
+POST_DETECTION_WINDOW = 2
+```
+
+---
+
+## 7. Detection and Blocking Separation
+
+The application separates the responsibility of **detecting suspicious activity** from the responsibility of **managing Apache block rules**.
+
+The main components are organized around these responsibilities:
+
+```text
+access_log.py
+    │
+    └── Read and parse Apache access logs
+
+log_grouper.py
+    │
+    └── Group requests into contiguous timestamp sequences
+
+sliding_window.py
+    │
+    └── Create sliding detection windows
+
+block_detector.py
+    │
+    └── Identify IPs that meet GET/POST detection rules
+
+block_manager.py
+    │
+    ├── Identify new IPs
+    ├── Maintain the automatic block section
+    └── Generate .htaccess block entries
+```
+
+This separation makes the code easier to test, maintain, and extend.
 
 ---
 
 ## Duplicate Block Prevention
 
-Before adding an IP to `.htaccess`, the application checks whether the IP is already present in the Apache Access Log Auto Blocker section.
+Before adding an IP address to `.htaccess`, the application checks whether that IP already exists inside the Apache Access Log Auto Blocker section.
 
 This prevents duplicate entries such as:
 
@@ -226,11 +299,20 @@ Require not ip 127.0.0.1
 
 Only newly detected IP addresses are added.
 
+This is particularly important when the application is executed repeatedly by a scheduler.
+
 ---
 
 ## `.htaccess` Management
 
-The application can automatically create the required `<RequireAll>` section when it does not already exist.
+The application can automatically create the required Apache `<RequireAll>` structure when necessary.
+
+The automatically managed section is identified using markers:
+
+```text
+# Apache Access Log Auto Blocker - BEGIN
+# Apache Access Log Auto Blocker - END
+```
 
 Example:
 
@@ -249,35 +331,33 @@ Example:
 </RequireAll>
 ```
 
-The automatically managed section is identified by:
-
-```text
-# Apache Access Log Auto Blocker - BEGIN
-# Apache Access Log Auto Blocker - END
-```
-
-This makes it possible to distinguish automatically generated rules from manually configured `.htaccess` rules.
+This allows automatically generated rules to remain separated from manually configured Apache rules.
 
 ---
 
 ## Configuration
 
-Detection behavior is configurable through `config.py`.
+Detection behavior is controlled through `config.py`.
 
 Configuration includes values such as:
 
 ```python
 access_log_read_window
+
 get_request_threshold
+
 get_detection_window
+
 post_request_threshold
+
 post_detection_window
+
 access_log_dt_format
 ```
 
-This allows detection behavior to be changed without modifying the detection algorithms.
+This allows detection behavior to be modified without changing the detection algorithms.
 
-For example:
+Example:
 
 ```python
 GET_REQUEST_THRESHOLD = 15
@@ -287,7 +367,7 @@ POST_REQUEST_THRESHOLD = 5
 POST_DETECTION_WINDOW = 2
 ```
 
-The actual configuration variable names and values can be adjusted according to the deployment environment.
+The actual values can be adjusted according to the deployment environment and desired detection sensitivity.
 
 ---
 
@@ -326,15 +406,15 @@ apache-access-log-blocker/
 └── README.md
 ```
 
-The application is separated into components so that log reading, grouping, detection, and block management can be tested independently.
+The project follows a modular structure so that log processing, detection logic, and Apache block management are separated into dedicated modules.
 
 ---
 
 ## Testing
 
-The project includes unit tests for the individual components as well as an end-to-end integration test.
+The project includes both unit tests and an end-to-end integration test.
 
-Run all tests with:
+Run the complete test suite with:
 
 ```bash
 pytest -v
@@ -342,18 +422,88 @@ pytest -v
 
 The test suite covers areas including:
 
-* Access log parsing
+* Apache access log parsing
 * Access log time-window filtering
 * Contiguous-second grouping
 * Sliding detection windows
 * GET detection
 * POST detection
+* Request threshold handling
 * Duplicate IP detection
 * `.htaccess` block-section management
 * Block-entry generation
 * End-to-end malicious IP detection and blocking
 
-The integration test verifies that the individual components work together as a complete detection and blocking pipeline.
+The integration test verifies that the individual processing components work together as a complete detection and blocking pipeline.
+
+---
+
+## Development Environment
+
+The project was developed and tested using:
+
+```text
+Python 3.14.6
+pytest 9.1.1
+```
+
+A Python virtual environment is recommended for local development.
+
+Example:
+
+```powershell
+python -m venv .venv
+```
+
+Activate the virtual environment on Windows:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install the project:
+
+```powershell
+python -m pip install -e .
+```
+
+Install development dependencies:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+```
+
+Run the tests:
+
+```powershell
+pytest -v
+```
+
+The `.venv` directory should not be committed to the repository. It should be excluded using `.gitignore`.
+
+---
+
+## Continuous Integration
+
+The project includes a GitHub Actions workflow for automated testing.
+
+The test workflow runs the test suite when changes are pushed to `main` or when a pull request targets `main`.
+
+The workflow:
+
+1. Checks out the repository
+2. Sets up Python
+3. Installs project dependencies
+4. Installs development dependencies
+5. Runs the complete pytest suite
+
+Example command used by the workflow:
+
+```bash
+python -m pytest -v
+```
+
+This provides automated verification that changes do not break the existing test suite.
 
 ---
 
@@ -365,33 +515,41 @@ The application can be executed using:
 python main.py
 ```
 
-The application reads the configured Apache access log, evaluates the configured detection rules, and updates the configured `.htaccess` file when a suspicious IP is detected.
+The application:
+
+1. Reads the configured Apache access log
+2. Filters requests within the configured read window
+3. Groups requests into contiguous timestamp sequences
+4. Creates sliding detection windows
+5. Applies GET and POST detection rules
+6. Identifies IP addresses that meet the configured thresholds
+7. Checks whether the IPs are already blocked
+8. Creates new Apache block entries
+9. Updates the configured `.htaccess` file
 
 ---
 
 ## Running with Cron
 
-The application is designed to be executed periodically using a cron job.
+The application is designed to be executed periodically by a scheduler.
 
-For example, to run the application every **5 seconds**, a cron scheduler can execute:
+A monitoring interval should be chosen based on the configured access-log read window and detection requirements.
 
-```bash
-python /path/to/apache-access-log-blocker/main.py
-```
-
-However, standard cron implementations commonly provide **one-minute granularity**. For sub-minute execution, a wrapper loop, systemd timer, or another scheduler capable of sub-minute intervals should be used.
-
-### Example: Cron Every Minute
-
-To run the application once per minute:
+For example, if the application is intended to check the log every minute:
 
 ```cron
 * * * * * /usr/bin/python3 /path/to/apache-access-log-blocker/main.py
 ```
 
-### Example: Multiple Runs Per Minute
+This executes the application once every minute.
 
-If a five-second monitoring interval is required, one approach is to use a shell loop:
+### Sub-Minute Monitoring
+
+Standard cron implementations commonly provide **one-minute granularity**.
+
+Therefore, cron alone is generally not appropriate when the application needs to run every few seconds.
+
+For example, a five-second monitoring interval could be implemented using a process loop:
 
 ```bash
 while true; do
@@ -400,7 +558,36 @@ while true; do
 done
 ```
 
-For production environments, a dedicated process supervisor or systemd service/timer may be preferable to a continuously running shell loop.
+For production environments, a dedicated process supervisor or `systemd` service/timer is preferable to a manually maintained shell loop.
+
+### Choosing the Schedule
+
+The scheduler interval should work together with the application's read and detection windows.
+
+For example:
+
+```text
+Read window:       10 seconds
+Detection window:   2 seconds
+Scheduler interval: 5 seconds
+```
+
+Conceptually:
+
+```text
+Every 5 seconds
+       │
+       ▼
+Read previous 10 seconds of logs
+       │
+       ▼
+Evaluate detection windows
+       │
+       ▼
+Block qualifying IPs
+```
+
+This overlapping approach helps avoid missing suspicious request bursts between executions.
 
 ---
 
@@ -408,40 +595,91 @@ For production environments, a dedicated process supervisor or systemd service/t
 
 Before deploying the application in production:
 
-1. Verify the Apache log format matches the configured parser indexes.
-2. Verify the configured `.htaccess` path.
-3. Test the generated `.htaccess` rules.
+1. Verify that the Apache log format matches the configured parser indexes.
+2. Verify the configured Apache `.htaccess` path.
+3. Test generated `.htaccess` rules before enabling automatic blocking.
 4. Start with conservative request thresholds.
-5. Monitor blocked IP addresses for false positives.
-6. Run the application under an account with the required permissions.
-7. Test the application against a copy of the production `.htaccess` before enabling automatic blocking.
+5. Monitor blocked IP addresses for potential false positives.
+6. Run the application using an account with the required file permissions.
+7. Test against a copy of the production `.htaccess` before enabling automatic modification.
 8. Ensure the Apache configuration supports the generated `Require not ip` directives.
+9. Keep a backup of the production `.htaccess` before enabling automatic updates.
+10. Consider logging block decisions separately for operational monitoring and auditing.
+
+Automatic IP blocking should be deployed carefully because legitimate clients can sometimes generate unexpected request patterns.
 
 ---
 
 ## Development History
 
-### Original Version
+### Original C++ Version
 
-The original implementation was written in **C++ approximately 19 years ago**.
+Approximately **19 years ago**, I developed the original version of this concept using C++.
 
-Its primary purpose was to monitor Apache access logs and automatically block IP addresses exhibiting suspicious request patterns.
+The original application monitored Apache access logs, identified suspicious request patterns, and automatically blocked IP addresses.
+
+At the time, the project was designed around the tools, architecture, and development practices available to me.
 
 ### Python Reimplementation
 
-The current version was rebuilt from the ground up in Python with a focus on:
+The current implementation was rebuilt from the ground up in Python.
 
-* Cleaner modular architecture
-* Testability
+The goal was not simply to translate the original C++ code into Python.
+
+Instead, the original concept was used as the foundation for a more structured implementation featuring:
+
+* Modular architecture
+* Separation of responsibilities
 * Configurable detection rules
+* Contiguous-second grouping
 * Sliding-window detection
-* Separate GET and POST detection
+* Dedicated GET and POST detection
+* URL-based POST detection
 * Automated `.htaccess` management
 * Duplicate-block prevention
-* Unit and integration testing
-* Easier future maintenance and extension
+* Unit testing
+* Integration testing
+* Automated CI testing
+* Configuration-driven behavior
 
-This is not simply a language conversion of the original implementation. The Python version is an **enhanced and modernized implementation** based on the same original concept.
+This makes the current implementation an **enhanced and modernized version** of the original tool rather than a direct language conversion.
+
+---
+
+## AI-Assisted Development
+
+AI tools were used as a development aid during this project, primarily for:
+
+* Brainstorming and design discussion
+* Code review
+* Debugging assistance
+* Test-case suggestions
+* Identifying edge cases
+* Documentation refinement
+
+AI assistance was used as a supporting development tool rather than as a replacement for development work.
+
+All architectural decisions, implementation choices, testing, debugging, integration work, and final code validation were performed and reviewed by the author.
+
+The resulting implementation was tested locally using the project's automated test suite, including unit tests and end-to-end integration testing.
+
+---
+
+## Project Goals
+
+The project was developed with several goals:
+
+* Revisit and modernize an older real-world development project
+* Demonstrate practical Python backend development
+* Apply modular software architecture
+* Separate processing and business responsibilities
+* Make detection behavior configurable
+* Improve testability
+* Introduce automated testing
+* Demonstrate CI-based test execution
+* Provide a practical Apache server automation example
+
+The project represents the evolution of an older C++ solution into a modern Python implementation with improved architecture, testing, and maintainability.
 
 ---
 
